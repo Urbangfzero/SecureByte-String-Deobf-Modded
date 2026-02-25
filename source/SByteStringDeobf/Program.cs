@@ -1,13 +1,14 @@
-﻿using dnlib.DotNet;
+﻿#region Header
+using dnlib.DotNet;
+using dnlib.DotNet.Pdb;
 using dnlib.DotNet.Writer;
-using SByteStringDeobf;
 using SecureByteResourceDecompressor.Decompressor;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
-namespace SecureByteToolkit
+#endregion
+namespace SecureByteStringDecryptor
 {
     internal class Program
     {
@@ -16,7 +17,7 @@ namespace SecureByteToolkit
 
         static void Main(string[] args)
         {
-            SetupConsole();
+            Logger.SetupConsole();
 
             if (!ResolveInput(args))
                 return;
@@ -38,17 +39,7 @@ namespace SecureByteToolkit
 
       
 
-        private static void SetupConsole()
-        {
-            Console.Title = "SecureByte String Decryptor";
-            Console.Clear();
-
-            Logger.Custom(@"
- =============================================
-    SecureByte String Decryptor
- =============================================
-", System.Drawing.Color.Cyan);
-        }
+    
 
      
 
@@ -133,24 +124,63 @@ namespace SecureByteToolkit
             Logger.Info("Resources replaced: " + replaced);
         }
 
-       
+
 
         private static void TryDecryptStrings(ModuleDefMD module)
         {
-            Logger.Info("Searching for encrypted string resource...");
+            Logger.Info("String Decryption Mode:");
+            Console.WriteLine("[1] Automatic Resource Detection");
+            Console.WriteLine("[2] Manual Resource Selection");
+            Console.Write("Select option: ");
 
-            string resourceName = ResourceFinder.FindResName(module);
+            string choice = Console.ReadLine();
+            string resourceName = null;
 
-            if (resourceName == null)
+            if (choice == "1")
             {
-                Logger.Warn("No string resource found. Skipping string decryption.");
+                resourceName = ResourceFinder.FindResName(module);
+
+                if (resourceName == null)
+                {
+                    Logger.Warn("Automatic detection failed.");
+                    return;
+                }
+
+                Logger.Success("Detected string resource: " + resourceName);
+            }
+            else if (choice == "2")
+            {
+                Logger.Info("Available Embedded Resources:");
+
+                foreach (var res in module.Resources.OfType<EmbeddedResource>())
+                    Console.WriteLine(" - " + res.Name);
+
+                Console.Write("Enter resource name exactly: ");
+                resourceName = Console.ReadLine();
+
+                if (!module.Resources.Any(r => r.Name == resourceName))
+                {
+                    Logger.Error("Resource not found.");
+                    return;
+                }
+            }
+            else
+            {
+                Logger.Warn("Invalid option.");
                 return;
             }
 
+            ProcessStringResource(module, resourceName);
+        }
+        private static void ProcessStringResource(ModuleDefMD module, string resourceName)
+        {
             var embedded = module.Resources.Find(resourceName) as EmbeddedResource;
 
             if (embedded == null)
+            {
+                Logger.Error("Invalid embedded resource.");
                 return;
+            }
 
             try
             {
@@ -175,7 +205,6 @@ namespace SecureByteToolkit
                 Logger.Error("String decryption failed: " + ex.Message);
             }
         }
-
         private static Dictionary<int, string> ReadStringsFromBytes(byte[] data)
         {
             Dictionary<int, string> result = new Dictionary<int, string>();
@@ -193,7 +222,7 @@ namespace SecureByteToolkit
             return result;
         }
 
-      
+        #region Save
         private static void SaveModule(ModuleDefMD module)
         {
             try
@@ -211,5 +240,6 @@ namespace SecureByteToolkit
                 Logger.Error("Failed to save cleaned EXE: " + ex.Message);
             }
         }
+        #endregion
     }
 }
